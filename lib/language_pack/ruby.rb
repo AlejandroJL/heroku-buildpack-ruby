@@ -862,7 +862,8 @@ params = CGI.parse(uri.query || "")
   end
 
   def add_yarn_binary
-    bundler.has_gem?('webpacker') && yarn_not_preinstalled? ? [@yarn_installer.name] : []
+    # bundler.has_gem?('webpacker') && yarn_not_preinstalled? ? [@yarn_installer.name] : []
+    [@yarn_installer.name]
   end
 
   # checks if node.js is installed via the official heroku-buildpack-nodejs using multibuildpack
