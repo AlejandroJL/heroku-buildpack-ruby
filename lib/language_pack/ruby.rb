@@ -102,6 +102,7 @@ WARNING
       setup_profiled
       allow_git do
         install_bundler_in_app
+        pre_bundler
         build_bundler("development:test")
         post_bundler
         create_database_yml
@@ -653,6 +654,61 @@ https://devcenter.heroku.com/articles/ruby-versions#your-ruby-version-is-x-but-y
         end
       end
     end
+  end
+
+  def pre_bundler
+    instrument 'ruby.update_bundler' do
+      log("bundle") do
+        bundle_bin     = "bundle"
+        bundle_command = "#{bundle_bin} update --source core"
+
+        if File.exist?("#{Dir.pwd}/.bundle/config")
+          warn(<<-WARNING, inline: true)
+You have the `.bundle/config` file checked into your repository
+ It contains local state like the location of the installed bundle
+ as well as configured git local gems, and other settings that should
+not be shared between multiple checkouts of a single repo. Please
+remove the `.bundle/` folder from your repo and add it to your `.gitignore` file.
+WARNING
+        end
+
+        topic("Updating Jump Core using bundler #{bundler.version}")
+        load_bundler_cache
+
+        bundler_output = ""
+        bundle_time    = nil
+
+        # need to setup compile environment for the psych gem
+        pwd            = Dir.pwd
+        bundler_path   = "#{pwd}/#{slug_vendor_base}/gems/#{BUNDLER_GEM_PATH}/lib"
+        # we need to set BUNDLE_CONFIG and BUNDLE_GEMFILE for
+        # codon since it uses bundler.
+        env_vars       = {
+          "BUNDLE_GEMFILE"                => "#{pwd}/#{ENV['BUNDLE_GEMFILE']}",
+          "BUNDLE_CONFIG"                 => "#{pwd}/.bundle/config",
+          "NOKOGIRI_USE_SYSTEM_LIBRARIES" => "true"
+        }
+        env_vars["BUNDLER_LIB_PATH"] = "#{bundler_path}" if ruby_version.ruby_version == "1.8.7"
+        puts "Running: #{bundle_command}"
+        instrument "ruby.update_install" do
+          bundle_time = Benchmark.realtime do
+            bundler_output << pipe("#{bundle_command}", out: "2>&1", env: env_vars, user_env: true)
+          end
+        end
+
+        if $?.success?
+          puts "Update Jump Core completed (#{"%.2f" % bundle_time}s)"
+          log "bundle", :status => "success"
+        else
+          log "bundle", :status => "failure"
+          error_message = "Failed to update Jump Core gem via Bundler."
+          puts "Bundler Output: #{bundler_output}"
+
+          error error_message
+        end
+      end
+    end
+
   end
 
   def post_bundler
